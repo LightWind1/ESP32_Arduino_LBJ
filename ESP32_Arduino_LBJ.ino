@@ -34,10 +34,6 @@ SimpleBLE ble;
 
 void Button0_Interrupt(void){
 	Serial.println("Button0");
-    String out = "BLE32 name: ";
-    out += String(millis() / 1000);
-    Serial.println(out);
-    ble.begin(out);
 }
 
 void decode(){
