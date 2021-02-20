@@ -88,72 +88,6 @@ static void HwSPI_Init(void)
   SpiEnd();
 }
 /*-----------------------------------------------------------------------
-*@brief		SPI发送一字节数据
-*@detail 	
-*@param		data - 要发送的数据
-*@retval	无
------------------------------------------------------------------------*/
-static void SPISendByte(uint8_t data)
-{	
-  //printf("SEND BYTE");
-  SpiStart();
-  digitalWrite(CC1101_CS_PIN, LOW);
-  //while(digitalRead(CC1101_MISO_PIN));
-  SPI.transfer(data);
-  digitalWrite(CC1101_CS_PIN, HIGH);
-  SpiEnd();
-}
-/*-----------------------------------------------------------------------
-*@brief		SPI接收一字节数据
-*@detail 	
-*@param		无
-*@retval	读到的数据
------------------------------------------------------------------------*/
-static uint8_t SPIReadByte(void)
-{	
-	//printf("READ BYTE");
-	uint8_t retval = 0;	//读取到的数据
-	SpiStart();
-  	digitalWrite(CC1101_CS_PIN, LOW);
-  	//while(digitalRead(CC1101_MISO_PIN));
-  	retval = SPI.transfer(0);
-  	digitalWrite(CC1101_CS_PIN, HIGH);
-  	SpiEnd();
-	return retval;
-}
-/*-----------------------------------------------------------------------
-*@brief		SPI底层数据传输
-*@detail 	
-*@param		rw - 数据传输方向/reg - 数据传输对象/dataOut - 要输出的数据存放地址
-*           dataIn - 读取到的数据存放位置/numByte - 要传输的数据个数
-*@retval	无
------------------------------------------------------------------------*/
-static void SPItransfer(uint8_t rw, uint8_t reg, uint8_t* dataOut, uint8_t* dataIn, uint32_t numBytes)
-{
-	printf("[CC1101]SPI Transfer:");
-	printf("%s",(rw==CC1101_CMD_WRITE)?"Write":"Read");
-	printf(" Register %02Xh -> ",reg);
-
-	CC1101_CS_Low();	//芯片使能
-	SPISendByte(rw|reg);	//发送读写状态位和寄存器地址
-	for(uint32_t n = 0;n < numBytes; n++)
-	{
-		if(rw == CC1101_CMD_WRITE)
-		{
-			SPISendByte(dataOut[n]);	//发送一字节数据
-			printf("%02Xh ",dataOut[n]);
-		}
-		else if(rw == CC1101_CMD_READ)
-		{
-			dataIn[n] = SPIReadByte();	//接收一字节数据
-			printf("%02Xh ",dataIn[n]);
-		}
-	}
-	CC1101_CS_High();	//芯片除能
-
-	printf("\r\n");
-}
-/*-----------------------------------------------------------------------
 *@brief		写入单个寄存器
 *@detail 	
 *@param		reg- 要写入的寄存器地址/data - 要写入的数据
@@ -218,8 +152,17 @@ static uint8_t SPIreadRegister(uint8_t reg)
 -----------------------------------------------------------------------*/
 static void SPIreadRegisterBurst(uint8_t reg, uint8_t* dataIn, uint32_t len)
 {
-	reg |= CC1101_CMD_BURST;	//加入批量访问标志位
-	SPItransfer(CC1101_CMD_READ,reg,NULL,dataIn,len);
+  uint8_t i,temp;
+  SpiStart();
+  temp = reg | CC1101_CMD_BURST; //加入批量访问标志位
+  digitalWrite(CC1101_CS_PIN, LOW);
+  while(digitalRead(CC1101_MISO_PIN));
+  SPI.transfer(temp);
+  for(i=0;i<len;i++){
+  	dataIn[i]=SPI.transfer(0);
+  }
+  digitalWrite(CC1101_CS_PIN, HIGH);
+  SpiEnd();
 }
 /*-----------------------------------------------------------------------
 *@brief		将寄存器写为掩码运算后的值（只改变某些位，其余位保持不变）
@@ -274,10 +217,13 @@ static uint8_t SPIgetMaskedRegValue(uint8_t reg, uint8_t msb, uint8_t lsb)
 -----------------------------------------------------------------------*/
 static void SPISendCommand(uint8_t cmd)
 {
-	CC1101_CS_Low();	//芯片使能
-	SPISendByte(cmd);	//发送单字节命令
-	CC1101_CS_High();	//芯片除能
-	Serial.print("[CC1101]Send command strobe:");
+    SpiStart();
+  	digitalWrite(CC1101_CS_PIN, LOW);
+  	while(digitalRead(CC1101_MISO_PIN));
+  	SPI.transfer(cmd);
+  	digitalWrite(CC1101_CS_PIN, HIGH);
+  	SpiEnd();
+  	Serial.print("[CC1101]Send command strobe:");
 	Serial.println(cmd,HEX);
 }
 /*-----------------------------------------------------------------------
@@ -889,8 +835,6 @@ void CC1101_StartReceive()
 {
 	CC1101_GoIdle();	//使CC1101进入空闲模式
 	SPISendCommand(CC1101_CMD_FLUSH_RX);//清空接收FIFO
-	//fpGDO2_IRQ_Callback = RxCallback;//指定接收完成时的回调函数
-	//在GDO2外部中断响应函数中调用
   	SPISendCommand(CC1101_CMD_RX);//使CC1101进入接收模式
   	printf(">Start Receiving...\r\n");
 }

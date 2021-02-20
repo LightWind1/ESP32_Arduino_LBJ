@@ -133,11 +133,9 @@ void setup() {
 
 
 void loop() {
-	
     while(Serial.available()) Serial.write(Serial.read());
 
 	if(CC1101_IRQ()){
-		//Serial.println("IRQ OK");
 		decode();
 	}
 	
