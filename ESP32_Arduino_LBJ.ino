@@ -1,36 +1,57 @@
-// Copyright 2015-2016 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+/*
+    Video: https://www.youtube.com/watch?v=oCMOYS71NIU
+    Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
+    Ported to Arduino ESP32 by Evandro Copercini
+    updated by chegewara
 
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+   Create a BLE server that, once we receive a connection, will send periodic notifications.
+   The service advertises itself as: 4fafc201-1fb5-459e-8fcc-c5c9c331914b
+   And has a characteristic of: beb5483e-36e1-4688-b7f5-ea07361b26a8
 
-// Sketch shows how to use SimpleBLE to advertise the name of the device and change it on the press of a button
-// Useful if you want to advertise some sort of message
-// Button is attached between GPIO 0 and GND, and the device name changes each time the button is pressed
+   The design of creating the BLE server is:
+   1. Create a BLE Server
+   2. Create a BLE Service
+   3. Create a BLE Characteristic on the Service
+   4. Create a BLE Descriptor on the characteristic
+   5. Start the service.
+   6. Start advertising.
 
+   A connect hander associated with the server starts a background task that performs notification
+   every couple of seconds.
+*/
 #include "POCSAG_GenerateLBJ.h"
-#include "SimpleBLE.h"
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
 #include "HW_RADIO_CC1101.h"
 #include "POCSAG_ParseLBJ.h"
 
 
-#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
-#error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
-#endif
+BLEServer* pServer = NULL;
+BLECharacteristic* pCharacteristic = NULL;
+bool deviceConnected = false;
+bool oldDeviceConnected = false;
+
+// See the following for generating UUIDs:
+// https://www.uuidgenerator.net/
+
+#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+
+
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+    };
+
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+    }
+};
 
 
 float Rf_Freq = 821.2375f;		//接收频率821.2375MHz
-
-SimpleBLE ble;
-
 
 void Button0_Interrupt(void){
 	Serial.println("Button0");
@@ -77,7 +98,14 @@ void decode(){
       
 				if(PocsagMsg.Address == LBJ_MESSAGE_ADDR)
 				{
-				//ShowMessageLBJ(&PocsagMsg,rssi,lqi);	//在OLED屏幕上显示LBJ解码信息
+					// notify changed value
+    				if (deviceConnected) {
+        			//pCharacteristic->setValue((uint8_t*)&PocsagMsg.txtMsg, 20);
+					pCharacteristic->setValue(PocsagMsg.txtMsg);
+        			pCharacteristic->notify();
+        			delay(3); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
+					Serial.println("notify send");
+    				}
 				}
       
 			}else{
@@ -116,21 +144,67 @@ void CC1101_Initialize(void)
 void setup() {
     Serial.begin(115200);
     Serial.setDebugOutput(true);
+
     pinMode(0, INPUT_PULLUP);
 	attachInterrupt(0,Button0_Interrupt,FALLING);//下降沿触发
+
     Serial.print("ESP32 SDK: ");
     Serial.println(ESP.getSdkVersion());
-    ble.begin("LBJ Reciever");
-    Serial.println("Press the button to change the device's name");
-    CC1101_Initialize();
+
+// Create the BLE Device
+  BLEDevice::init("ESP32");
+
+  // Create the BLE Server
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  // Create the BLE Service
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+
+  // Create a BLE Characteristic
+  pCharacteristic = pService->createCharacteristic(
+                      CHARACTERISTIC_UUID,
+                      BLECharacteristic::PROPERTY_READ   |
+                      BLECharacteristic::PROPERTY_WRITE  |
+                      BLECharacteristic::PROPERTY_NOTIFY |
+                      BLECharacteristic::PROPERTY_INDICATE
+                    );
+
+  // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.client_characteristic_configuration.xml
+  // Create a BLE Descriptor
+  pCharacteristic->addDescriptor(new BLE2902());
+
+  // Start the service
+  pService->start();
+
+  // Start advertising
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(false);
+  pAdvertising->setMinPreferred(0x0);  // set value to 0x00 to not advertise this parameter
+  BLEDevice::startAdvertising();
+  Serial.println("Waiting a client connection to notify...");
+
+  CC1101_Initialize();
 }
 
 
 void loop() {
-    while(Serial.available()) Serial.write(Serial.read());
+    //while(Serial.available()) Serial.write(Serial.read());
 	if(CC1101_IRQ()){
 		decode();
 	}
-	
+    // disconnecting
+    if (!deviceConnected && oldDeviceConnected) {
+        delay(500); // give the bluetooth stack the chance to get things ready
+        pServer->startAdvertising(); // restart advertising
+        Serial.println("start advertising");
+        oldDeviceConnected = deviceConnected;
+    }
+    // connecting
+    if (deviceConnected && !oldDeviceConnected) {
+        // do stuff here on connecting
+        oldDeviceConnected = deviceConnected;
+    }
 	//delay(100);
 }
