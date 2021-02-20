@@ -7,6 +7,15 @@
 -----------------------------------------------------------------------*/
 
 #include "POCSAG_GenerateLBJ.h"
+#include "HW_RADIO_CC1101.h"
+
+struct LBJInfo_t{
+	uint32_t addr;
+	int8_t Train_dir;
+	char LBJ_InfoStr[16];	//储存列车报警信息
+} LBJ_Info;
+
+
 
 uint32_t POCSAG_Batch1[16] = {0};	//码组1，包含16个码字
 uint32_t POCSAG_Batch2[16] = {0};	//码组2，包含16个码字
@@ -284,4 +293,70 @@ int8_t POCSAG_MakeCodeWordsLBJ(uint32_t Address, int8_t FuncCode, char* Text,
 		retval = 2;	//返回“占用两个码组”，程序结束
 	}
 	return retval;
+}
+
+
+void Transmit_POCSAG_LBJ(void)
+{
+	int8_t pocsag_retval = 0;	//POCSAG生成程序的状态码
+	static uint8_t tx_cnt = 0;	//发送次数计数
+	uint32_t pkt_len = CC1101_GetPacketLength(false);
+						//读取在初始化时设置的包长度，本程序设为16字节固定长度
+						//为POCSAG编码Batch1前4个码字的长度，截断至4个码字
+	switch(tx_cnt)
+	{
+	case 0:
+		LBJ_Info.addr = 1234000;
+		LBJ_Info.Train_dir = FUNC_XIAXING;
+		strcpy(LBJ_Info.LBJ_InfoStr," 2667  75  1280");
+		break;
+	case 1:
+		LBJ_Info.addr = 1234000;
+		LBJ_Info.Train_dir = FUNC_SHANGXING;
+		strcpy(LBJ_Info.LBJ_InfoStr," 4230 104  1680");
+		break;
+	case 2:
+		LBJ_Info.addr = 1234000;
+		LBJ_Info.Train_dir = FUNC_XIAXING;
+		strcpy(LBJ_Info.LBJ_InfoStr," 2219  68  1040");
+		break;
+	case 3:
+		LBJ_Info.addr = 1234000;
+		LBJ_Info.Train_dir = FUNC_SHANGXING;
+		strcpy(LBJ_Info.LBJ_InfoStr," 8054 284  2240");
+		break;
+	case 4:
+		LBJ_Info.addr = 1234008;
+		LBJ_Info.Train_dir = FUNC_TIMESYNC;
+		strcpy(LBJ_Info.LBJ_InfoStr,"*1612");
+		break;
+	}
+	
+	pocsag_retval = POCSAG_MakeCodeWordsLBJ(LBJ_Info.addr,
+											LBJ_Info.Train_dir,
+					 						LBJ_Info.LBJ_InfoStr,
+					 						BATCH2_TRUNCATE,
+											true);								
+	if(pocsag_retval > POCSAG_ERR_NONE)
+	{
+		Serial.print("POCSAG LBJ message:");
+		Serial.println(LBJ_Info.LBJ_InfoStr);
+		Serial.print("Generated ");
+		Serial.print(pocsag_retval);
+		Serial.println(" batch(s) of POCSAG codewords.");
+		CC1101_Transmit((uint8_t*)POCSAG_Batch1,pkt_len);
+									//将Batch1前4个码字发送，共16字节
+		Serial.println("Transmitted 4 codewords, 16 bytes Total.");
+		
+	}
+	else
+	{
+		printf("Generate POCSAG codewords failed! Errcode:%hhd\n",
+													pocsag_retval);
+	}
+	
+	if(++tx_cnt == 5)	//5次一循环
+		tx_cnt = 0;
+
+	
 }

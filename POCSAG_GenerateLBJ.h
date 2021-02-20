@@ -10,9 +10,6 @@
 
 #include <Arduino.h>
 
-extern uint32_t POCSAG_Batch1[];	//数组：储存码组1的数据
-extern uint32_t POCSAG_Batch2[];	//数组：储存码组2的数据
-
 //定义2个功能码表示上下行，按照标准TB/T3504-2018
 #define FUNC_SHANGXING		0x3	//功能码11:上行
 #define FUNC_XIAXING		0x1	//功能码01:下行

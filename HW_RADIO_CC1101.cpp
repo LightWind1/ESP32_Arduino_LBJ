@@ -98,7 +98,7 @@ static void SPISendByte(uint8_t data)
   //printf("SEND BYTE");
   SpiStart();
   digitalWrite(CC1101_CS_PIN, LOW);
-  while(digitalRead(CC1101_MISO_PIN));
+  //while(digitalRead(CC1101_MISO_PIN));
   SPI.transfer(data);
   digitalWrite(CC1101_CS_PIN, HIGH);
   SpiEnd();
@@ -115,7 +115,7 @@ static uint8_t SPIReadByte(void)
 	uint8_t retval = 0;	//读取到的数据
 	SpiStart();
   	digitalWrite(CC1101_CS_PIN, LOW);
-  	while(digitalRead(CC1101_MISO_PIN));
+  	//while(digitalRead(CC1101_MISO_PIN));
   	retval = SPI.transfer(0);
   	digitalWrite(CC1101_CS_PIN, HIGH);
   	SpiEnd();
@@ -178,8 +178,17 @@ static void SPIwriteRegister(uint8_t reg, uint8_t data)
 -----------------------------------------------------------------------*/
 static void SPIwriteRegisterBurst(uint8_t reg, uint8_t* dataOut, uint32_t len)
 {
-	reg |= CC1101_CMD_BURST;	//加入批量访问标志位
-	SPItransfer(CC1101_CMD_WRITE,reg,dataOut,NULL,len);
+  uint8_t i, temp;
+  SpiStart();
+  temp = reg | CC1101_CMD_BURST;
+  digitalWrite(CC1101_CS_PIN, LOW);
+  while(digitalRead(CC1101_MISO_PIN));
+  SPI.transfer(temp);
+  for (i = 0; i < len; i++){
+  	SPI.transfer(dataOut[i]);
+  }
+  digitalWrite(CC1101_CS_PIN, HIGH);
+  SpiEnd();
 }
 /*-----------------------------------------------------------------------
 *@brief		读取单个寄存器
@@ -932,15 +941,16 @@ int8_t CC1101_Transmit(uint8_t* data, uint32_t len)
 		return(RADIO_ERR_PACKET_TOO_LONG);
 	}
 	CC1101_GoIdle();	//使CC1101进入空闲模式
+	
 	SPISendCommand(CC1101_CMD_FLUSH_TX);//清空发送FIFO
-	//fpGDO2_IRQ_Callback = TxCallback;//指定发送完成时的回调函数
-
+	
 	//1.如果为变长数据模式，先发送包长度，为有用数据长度
 	if (_packetLengthMode == CC1101_LENGTH_CONFIG_VARIABLE)
 		SPIwriteRegister(CC1101_REG_FIFO,len);
 	//2.写入后续有用数据到FIFO
 	SPIwriteRegisterBurst(CC1101_REG_FIFO, data, len);
 	SPISendCommand(CC1101_CMD_TX);//使CC1101进入发射模式
+	
 	return(RADIO_ERR_NONE);
 }
 /*-----------------------------------------------------------------------

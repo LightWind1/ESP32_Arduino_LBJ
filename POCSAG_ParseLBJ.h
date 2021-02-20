@@ -8,6 +8,8 @@
 #ifndef POCSAG_PARSE_H
 #define POCSAG_PARSE_H
 
+
+
 #include <Arduino.h>
 
 //TB/T3504-2018《列车接近预警地面设备》中定义的表示上下行的功能码
@@ -41,7 +43,7 @@ typedef struct{
 
 //POCSAG编码的列车接近预警消息解析子程序
 uint8_t POCSAG_ParseCodeWordsLBJ(POCSAG_RESULT* Parse_Result, uint8_t Batch_data[], uint8_t Batch_len, bool Invert);
-
+void Transmit_POCSAG_LBJ(void);
 
 
 

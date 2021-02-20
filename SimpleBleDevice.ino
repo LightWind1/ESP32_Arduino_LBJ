@@ -16,37 +16,21 @@
 // Useful if you want to advertise some sort of message
 // Button is attached between GPIO 0 and GND, and the device name changes each time the button is pressed
 
+#include "POCSAG_GenerateLBJ.h"
 #include "SimpleBLE.h"
 #include "HW_RADIO_CC1101.h"
 #include "POCSAG_ParseLBJ.h"
-#include "POCSAG_GenerateLBJ.h"
+
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
 #endif
 
-// a flag that a wireless packet has been received
-volatile boolean packetAvailable = false;
 
 float Rf_Freq = 821.2375f;		//接收频率821.2375MHz
 
 SimpleBLE ble;
 
-struct LBJInfo_t{
-	uint32_t addr;
-	int8_t Train_dir;
-	char LBJ_InfoStr[16];	//储存列车报警信息
-} LBJ_Info;
-
-void CC1101_Interrupt(void) {
-	Serial.println("Interrupt OK");
-    // disable sleep otherwise mcu could crash
-    //sleep_disable();
-    // Disable wireless reception interrupt
-    //detachInterrupt(0);
-    // set the flag that a package is available
-    packetAvailable = true;
-}
 
 void Button0_Interrupt(void){
 	Serial.println("Button0");
@@ -56,12 +40,13 @@ void Button0_Interrupt(void){
     Serial.println(out);
     ble.begin(out);
 	*/
-	//Transmit_POCSAG_LBJ();
+	Transmit_POCSAG_LBJ();
 }
 
 void decode(){
 		uint8_t* batch_buff = NULL;	//存放码字原始数据的缓冲区
 		uint32_t batch_len = CC1101_GetPacketLength(false);
+		
 		//获取已设置的包长度,在本例中已在初始化中设置为4个码字的长度16字节
 		uint32_t actual_len;//实际读到的原始数据长度，定长模式时和batch_len相同
 		POCSAG_RESULT PocsagMsg;//保存POCSAG解码结果的结构体
@@ -83,7 +68,7 @@ void decode(){
 				if((i+1)%16 == 0)
 					printf("\r\n");	//每行16个
 			}
-			/*
+			
 			//解析LBJ信息
 			POCSAG_RESULT PocsagMsg;//保存POCSAG解码结果的结构体
       		int8_t state = POCSAG_ParseCodeWordsLBJ(&PocsagMsg,batch_buff,
@@ -105,69 +90,9 @@ void decode(){
 				Serial.print("POCSAG parse failed! Errorcode:");
       			Serial.println(state);
 			}
-			*/
+			
 			free(batch_buff);
 		}
-}
-
-void Transmit_POCSAG_LBJ(void)
-{
-	int8_t pocsag_retval;	//POCSAG生成程序的状态码
-	static uint8_t tx_cnt = 0;	//发送次数计数
-	uint32_t pkt_len = CC1101_GetPacketLength(false);
-						//读取在初始化时设置的包长度，本程序设为16字节固定长度
-						//为POCSAG编码Batch1前4个码字的长度，截断至4个码字
-	switch(tx_cnt)
-	{
-	case 0:
-		LBJ_Info.addr = 1234000;
-		LBJ_Info.Train_dir = FUNC_XIAXING;
-		strcpy(LBJ_Info.LBJ_InfoStr," 2667  75  1280");
-		break;
-	case 1:
-		LBJ_Info.addr = 1234000;
-		LBJ_Info.Train_dir = FUNC_SHANGXING;
-		strcpy(LBJ_Info.LBJ_InfoStr," 4230 104  1680");
-		break;
-	case 2:
-		LBJ_Info.addr = 1234000;
-		LBJ_Info.Train_dir = FUNC_XIAXING;
-		strcpy(LBJ_Info.LBJ_InfoStr," 2219  68  1040");
-		break;
-	case 3:
-		LBJ_Info.addr = 1234000;
-		LBJ_Info.Train_dir = FUNC_SHANGXING;
-		strcpy(LBJ_Info.LBJ_InfoStr," 8054 284  2240");
-		break;
-	case 4:
-		LBJ_Info.addr = 1234008;
-		LBJ_Info.Train_dir = FUNC_TIMESYNC;
-		strcpy(LBJ_Info.LBJ_InfoStr,"*1612");
-		break;
-	}
-	
-	pocsag_retval = POCSAG_MakeCodeWordsLBJ(LBJ_Info.addr,
-											LBJ_Info.Train_dir,
-					 						LBJ_Info.LBJ_InfoStr,
-					 						BATCH2_TRUNCATE,
-											true);
-	if(pocsag_retval > POCSAG_ERR_NONE)
-	{
-		printf("POCSAG LBJ message:%s\r\n",LBJ_Info.LBJ_InfoStr);
-		printf("Generated %hhd batch(s) of POCSAG codewords.\r\n",
-													pocsag_retval);
-		CC1101_Transmit((uint8_t*)POCSAG_Batch1,pkt_len);
-									//将Batch1前4个码字发送，共16字节
-		printf("Transmitted 4 codewords, 16 bytes Total.\r\n\r\n");
-	}
-	else
-	{
-		printf("Generate POCSAG codewords failed! Errcode:%hhd\r\n",
-													pocsag_retval);
-	}
-
-	if(++tx_cnt == 5)	//5次一循环
-		tx_cnt = 0;
 }
 
 void CC1101_Initialize(void)
@@ -210,20 +135,11 @@ void setup() {
 void loop() {
 	
     while(Serial.available()) Serial.write(Serial.read());
-	/*
-	if(packetAvailable){
-		Serial.println("OK");
 
-		//decode();
-		packetAvailable = false;
-		CC1101_StartReceive();	//继续接收
-	}
-	*/
 	if(CC1101_IRQ()){
-		Serial.println("IRQ OK");
+		//Serial.println("IRQ OK");
 		decode();
 	}
 	
-		
 	//delay(100);
 }
