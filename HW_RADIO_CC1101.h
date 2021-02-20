@@ -10,21 +10,22 @@
 
 #include <Arduino.h>
 
-/*
+///*
 #define CC1101_SCK_PIN		18
 #define CC1101_MISO_PIN		19
 #define CC1101_MOSI_PIN		23
 #define CC1101_CS_PIN 		5
 #define CC1101_GDO0_PIN 	36
 #define CC1101_GDO2_PIN 	25
-*/
+//*/
+/*
 #define CC1101_SCK_PIN		25
 #define CC1101_MISO_PIN		27
 #define CC1101_MOSI_PIN		26
 #define CC1101_CS_PIN 		33
 #define CC1101_GDO0_PIN 	36
 #define CC1101_GDO2_PIN 	2
-
+*/
 
 // CC1101 physical layer properties
 #define CC1101_FIFO_SIZE                      	  	  64
@@ -33,6 +34,7 @@
 #define CC1101_CMD_READ                               0x80
 #define CC1101_CMD_WRITE                              0x00
 #define CC1101_CMD_BURST                              0x40
+#define CC1101_CMD_READ_BURST                         0xC0
 #define CC1101_CMD_ACCESS_STATUS_REG                  0x40
 #define CC1101_CMD_RESET                              0x30
 #define CC1101_CMD_FSTXON                             0x31

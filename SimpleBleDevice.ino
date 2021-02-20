@@ -34,18 +34,16 @@ SimpleBLE ble;
 
 void Button0_Interrupt(void){
 	Serial.println("Button0");
-	/*
     String out = "BLE32 name: ";
     out += String(millis() / 1000);
     Serial.println(out);
     ble.begin(out);
-	*/
-	Transmit_POCSAG_LBJ();
 }
 
 void decode(){
 		uint8_t* batch_buff = NULL;	//存放码字原始数据的缓冲区
 		uint32_t batch_len = CC1101_GetPacketLength(false);
+
 		
 		//获取已设置的包长度,在本例中已在初始化中设置为4个码字的长度16字节
 		uint32_t actual_len;//实际读到的原始数据长度，定长模式时和batch_len相同
@@ -59,14 +57,14 @@ void decode(){
 			float rssi = CC1101_GetRSSI();//由于接收完成后处于IDLE态
 			uint8_t lqi = CC1101_GetLQI();//这里的RSSI和LQI冻结不变与本次数据包相对应
 
-			printf("!!Received %u bytes of raw data.\r\n",actual_len);
-			printf("RSSI:%.1f LQI:%hhu\r\n",rssi,lqi);
-			printf("Raw data:\r\n");
+			printf("!!Received %u bytes of raw data.\n",actual_len);
+			printf("RSSI:%.1f LQI:%hhu\n",rssi,lqi);
+			printf("Raw data:\n");
 			for(uint32_t i=0;i < actual_len;i++)
 			{
 				printf("%02Xh ",batch_buff[i]);//打印原始数据
 				if((i+1)%16 == 0)
-					printf("\r\n");	//每行16个
+					printf("\n");	//每行16个
 			}
 			
 			//解析LBJ信息
@@ -134,7 +132,6 @@ void setup() {
 
 void loop() {
     while(Serial.available()) Serial.write(Serial.read());
-
 	if(CC1101_IRQ()){
 		decode();
 	}

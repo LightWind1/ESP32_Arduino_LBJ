@@ -10,12 +10,6 @@
 #include <Arduino.h>
 #include "HW_RADIO_CC1101.h"
 
-
-
-
-#define	CC1101_CS_High()	digitalWrite(CC1101_CS_PIN, HIGH);  //拉高片选（失能）
-#define	CC1101_CS_Low() 	digitalWrite(CC1101_SCK_PIN, LOW);	//拉低片选（使能）
-
 int8_t trxstate = 0;
 static uint8_t _packetLength = CC1101_FIFO_SIZE;	//内部变量，记录包长度或最大长度
 static uint8_t _packetLengthMode = CC1101_LENGTH_CONFIG_FIXED;	//内部变量，保存数据包长度模式
@@ -154,7 +148,7 @@ static void SPIreadRegisterBurst(uint8_t reg, uint8_t* dataIn, uint32_t len)
 {
   uint8_t i,temp;
   SpiStart();
-  temp = reg | CC1101_CMD_BURST; //加入批量访问标志位
+  temp = reg | CC1101_CMD_READ_BURST; //加入批量访问标志位
   digitalWrite(CC1101_CS_PIN, LOW);
   while(digitalRead(CC1101_MISO_PIN));
   SPI.transfer(temp);
@@ -326,7 +320,6 @@ int8_t CC1101_IRQ(void)
 	else							// no data
 	{
 		return 0;
-		
 	}
 }
 /*-----------------------------------------------------------------------
