@@ -71,13 +71,9 @@ void BLE_Init(){
   // Create a BLE Characteristic
   pCharacteristic = pService->createCharacteristic(
                       CHARACTERISTIC_UUID,
-                      BLECharacteristic::PROPERTY_READ   |
-                      BLECharacteristic::PROPERTY_WRITE  |
-                      BLECharacteristic::PROPERTY_NOTIFY |
-                      BLECharacteristic::PROPERTY_INDICATE
+                      BLECharacteristic::PROPERTY_NOTIFY
                     );
 
-  // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.client_characteristic_configuration.xml
   // Create a BLE Descriptor
   pCharacteristic->addDescriptor(new BLE2902());
 
@@ -93,68 +89,7 @@ void BLE_Init(){
   Serial.println("Waiting a client connection to notify...");
 }
 
-void decode(){
-		uint8_t* batch_buff = NULL;	//存放码字原始数据的缓冲区
-		uint32_t batch_len = CC1101_GetPacketLength(false);
-
-		
-		//获取已设置的包长度,在本例中已在初始化中设置为4个码字的长度16字节
-		uint32_t actual_len;//实际读到的原始数据长度，定长模式时和batch_len相同
-		POCSAG_RESULT PocsagMsg;//保存POCSAG解码结果的结构体
-
-		if((batch_buff=(uint8_t*)malloc(batch_len*sizeof(uint8_t))) != NULL){
-
-			memset(batch_buff,0,batch_len);	//清空batch缓存
-
-			CC1101_ReadDataFIFO(batch_buff,&actual_len);//从FIFO读入原始数据
-			float rssi = CC1101_GetRSSI();//由于接收完成后处于IDLE态
-			uint8_t lqi = CC1101_GetLQI();//这里的RSSI和LQI冻结不变与本次数据包相对应
-
-			printf("!!Received %u bytes of raw data.\n",actual_len);
-			printf("RSSI:%.1f LQI:%hhu\n",rssi,lqi);
-			printf("Raw data:\n");
-			for(uint32_t i=0;i < actual_len;i++)
-			{
-				printf("%02Xh ",batch_buff[i]);//打印原始数据
-				if((i+1)%16 == 0)
-					printf("\n");	//每行16个
-			}
-			
-			//解析LBJ信息
-			POCSAG_RESULT PocsagMsg;//保存POCSAG解码结果的结构体
-      		int8_t state = POCSAG_ParseCodeWordsLBJ(&PocsagMsg,batch_buff,
-												 actual_len,true);
-
-      		if(state == POCSAG_ERR_NONE){				
-      			//显示地址码，功能码
-      			Serial.print("Address:");		  Serial.println(PocsagMsg.Address);		
-      			Serial.print("Function:");	  Serial.println(PocsagMsg.FuncCode);		
-				//显示文本消息										
-      			Serial.print("LBJ Message:"); Serial.println(PocsagMsg.txtMsg);
-      
-				if(PocsagMsg.Address == LBJ_MESSAGE_ADDR)
-				{
-					// notify changed value
-    				if (deviceConnected) {
-        			//pCharacteristic->setValue((uint8_t*)&PocsagMsg.txtMsg, 20);
-					pCharacteristic->setValue(PocsagMsg.txtMsg);
-        			pCharacteristic->notify();
-        			delay(3); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
-					Serial.println("notify send");
-    				}
-				}
-      
-			}else{
-				Serial.print("POCSAG parse failed! Errorcode:");
-      			Serial.println(state);
-			}
-			
-			free(batch_buff);
-		}
-}
-
-void CC1101_Initialize(void)
-{
+void DecodeTask( void * parameter ){
 	int8_t cc1101_state;	//设置CC1101时返回的状态码
 	uint8_t delay_count = 0;	//延时计数
 
@@ -169,13 +104,73 @@ void CC1101_Initialize(void)
 		//attachInterrupt(CC1101_GDO2_PIN,CC1101_Interrupt,FALLING);//下降沿触发
 		CC1101_StartReceive();
 		Serial.println("CC1101 initialize ");
+		while(1){
+	  		if(CC1101_IRQ()){
+				uint8_t* batch_buff = NULL;	//存放码字原始数据的缓冲区
+				uint32_t batch_len = CC1101_GetPacketLength(false);
+
+				//获取已设置的包长度,在本例中已在初始化中设置为4个码字的长度16字节
+				uint32_t actual_len;//实际读到的原始数据长度，定长模式时和batch_len相同
+				POCSAG_RESULT PocsagMsg;//保存POCSAG解码结果的结构体
+
+				if((batch_buff=(uint8_t*)malloc(batch_len*sizeof(uint8_t))) != NULL){
+
+					memset(batch_buff,0,batch_len);	//清空batch缓存
+					CC1101_ReadDataFIFO(batch_buff,&actual_len);//从FIFO读入原始数据
+					float rssi = CC1101_GetRSSI();//由于接收完成后处于IDLE态
+					uint8_t lqi = CC1101_GetLQI();//这里的RSSI和LQI冻结不变与本次数据包相对应
+
+					printf("!!Received %u bytes of raw data.\n",actual_len);
+					printf("RSSI:%.1f LQI:%hhu\n",rssi,lqi);
+					printf("Raw data:\n");
+					for(uint32_t i=0;i < actual_len;i++){
+						printf("%02Xh ",batch_buff[i]);//打印原始数据
+						if((i+1)%16 == 0)
+							printf("\n");	//每行16个
+					}
+			
+					//解析LBJ信息
+					POCSAG_RESULT PocsagMsg;//保存POCSAG解码结果的结构体
+      				int8_t state = POCSAG_ParseCodeWordsLBJ(&PocsagMsg,batch_buff,
+												 actual_len,true);
+
+      				if(state == POCSAG_ERR_NONE){				
+      					//显示地址码，功能码
+      					Serial.print("Address:");		  Serial.println(PocsagMsg.Address);		
+      					Serial.print("Function:");	  Serial.println(PocsagMsg.FuncCode);		
+						//显示文本消息										
+      					Serial.print("LBJ Message:"); Serial.println(PocsagMsg.txtMsg);
+      
+						if(PocsagMsg.Address == LBJ_MESSAGE_ADDR)
+						{
+							// notify changed value
+    						if (deviceConnected) {
+								pCharacteristic->setValue(PocsagMsg.txtMsg);
+        						pCharacteristic->notify();
+        						delay(3); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
+								Serial.println("notify send");
+    						}
+						}
+      
+					}else{
+						Serial.print("POCSAG parse failed! Errorcode:");
+      					Serial.println(state);
+					}
+			
+				free(batch_buff);
+			}
+		}
+			vTaskDelay(3);
+		}
 	}
-	else
-	{
+	else{
 		Serial.println("CC1101 ERROR");
 	}
-	
+	Serial.println("Ending task Decode");
+
+    vTaskDelete(NULL);
 }
+
 
 void setup() {
     Serial.begin(115200);
@@ -184,21 +179,15 @@ void setup() {
     pinMode(0, INPUT_PULLUP);
 	attachInterrupt(0,Button0_Interrupt,FALLING);//下降沿触发
 
-    Serial.print("ESP32 SDK: ");
-    Serial.println(ESP.getSdkVersion());
-
 	BLE_Init();
- 	CC1101_Initialize();
-
-	
+ 	
+	xTaskCreate(DecodeTask,"DecodeTask", 10000, NULL,1,NULL);// Task handle. 
+	 //Stack size 10000,Priority 1, Parameter passed as input of the task
 }
 
 
 void loop() {
-    //while(Serial.available()) Serial.write(Serial.read());
-	if(CC1101_IRQ()){
-		decode();
-	}
+
     // disconnecting
     if (!deviceConnected && oldDeviceConnected) {
         delay(500); // give the bluetooth stack the chance to get things ready
@@ -211,5 +200,4 @@ void loop() {
         // do stuff here on connecting
         oldDeviceConnected = deviceConnected;
     }
-	//delay(100);
 }
