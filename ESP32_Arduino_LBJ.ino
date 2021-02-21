@@ -57,38 +57,6 @@ void Button0_Interrupt(void){
 	Serial.println("Button0");
 }
 
-void BLE_Init(){
-  // Create the BLE Device
-  BLEDevice::init("ESP32");
-
-  // Create the BLE Server
-  pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
-
-  // Create the BLE Service
-  BLEService *pService = pServer->createService(SERVICE_UUID);
-
-  // Create a BLE Characteristic
-  pCharacteristic = pService->createCharacteristic(
-                      CHARACTERISTIC_UUID,
-                      BLECharacteristic::PROPERTY_NOTIFY
-                    );
-
-  // Create a BLE Descriptor
-  pCharacteristic->addDescriptor(new BLE2902());
-
-  // Start the service
-  pService->start();
-
-  // Start advertising
-  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(SERVICE_UUID);
-  pAdvertising->setScanResponse(false);
-  pAdvertising->setMinPreferred(0x0);  // set value to 0x00 to not advertise this parameter
-  BLEDevice::startAdvertising();
-  Serial.println("Waiting a client connection to notify...");
-}
-
 void DecodeTask( void * parameter ){
 	int8_t cc1101_state;	//设置CC1101时返回的状态码
 	uint8_t delay_count = 0;	//延时计数
@@ -101,7 +69,6 @@ void DecodeTask( void * parameter ){
 	
 	if(cc1101_state == RADIO_ERR_NONE)	//若找到器件，设置成功
 	{
-		//attachInterrupt(CC1101_GDO2_PIN,CC1101_Interrupt,FALLING);//下降沿触发
 		CC1101_StartReceive();
 		Serial.println("CC1101 initialize ");
 		while(1){
@@ -171,6 +138,55 @@ void DecodeTask( void * parameter ){
     vTaskDelete(NULL);
 }
 
+void BleTask( void * parameter ){
+	// Create the BLE Device
+  	BLEDevice::init("ESP32");
+
+  	// Create the BLE Server
+  	pServer = BLEDevice::createServer();
+  	pServer->setCallbacks(new MyServerCallbacks());
+
+  	// Create the BLE Service
+  	BLEService *pService = pServer->createService(SERVICE_UUID);
+
+  	// Create a BLE Characteristic
+  	pCharacteristic = pService->createCharacteristic(
+                      CHARACTERISTIC_UUID,
+                      BLECharacteristic::PROPERTY_NOTIFY
+                    );
+
+  	// Create a BLE Descriptor
+  	pCharacteristic->addDescriptor(new BLE2902());
+
+  	// Start the service
+  	pService->start();
+
+  	// Start advertising
+  	BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  	pAdvertising->addServiceUUID(SERVICE_UUID);
+  	pAdvertising->setScanResponse(false);
+  	pAdvertising->setMinPreferred(0x0);  // set value to 0x00 to not advertise this parameter
+  	BLEDevice::startAdvertising();
+  	Serial.println("Waiting a client connection to notify...");
+	
+	while(1){
+		 // disconnecting
+   	 	if (!deviceConnected && oldDeviceConnected) {
+        	delay(500); // give the bluetooth stack the chance to get things ready
+        	pServer->startAdvertising(); // restart advertising
+        	Serial.println("start advertising");
+        	oldDeviceConnected = deviceConnected;
+    	}
+    	// connecting
+    	if (deviceConnected && !oldDeviceConnected) {
+        // do stuff here on connecting
+        	oldDeviceConnected = deviceConnected;
+    	}
+		vTaskDelay(3);
+	}
+
+	vTaskDelete(NULL);
+}
 
 void setup() {
     Serial.begin(115200);
@@ -178,26 +194,13 @@ void setup() {
 
     pinMode(0, INPUT_PULLUP);
 	attachInterrupt(0,Button0_Interrupt,FALLING);//下降沿触发
-
-	BLE_Init();
  	
-	xTaskCreate(DecodeTask,"DecodeTask", 10000, NULL,1,NULL);// Task handle. 
+	xTaskCreate(DecodeTask,"DecodeTask", 10000, NULL,2,NULL);// Task handle. 
+	xTaskCreate(BleTask,"BleTask", 10000, NULL,1,NULL);// Task handle. 
 	 //Stack size 10000,Priority 1, Parameter passed as input of the task
 }
 
 
 void loop() {
 
-    // disconnecting
-    if (!deviceConnected && oldDeviceConnected) {
-        delay(500); // give the bluetooth stack the chance to get things ready
-        pServer->startAdvertising(); // restart advertising
-        Serial.println("start advertising");
-        oldDeviceConnected = deviceConnected;
-    }
-    // connecting
-    if (deviceConnected && !oldDeviceConnected) {
-        // do stuff here on connecting
-        oldDeviceConnected = deviceConnected;
-    }
 }
