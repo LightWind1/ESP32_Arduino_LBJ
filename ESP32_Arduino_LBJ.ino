@@ -1,24 +1,4 @@
-/*
-    Video: https://www.youtube.com/watch?v=oCMOYS71NIU
-    Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
-    Ported to Arduino ESP32 by Evandro Copercini
-    updated by chegewara
 
-   Create a BLE server that, once we receive a connection, will send periodic notifications.
-   The service advertises itself as: 4fafc201-1fb5-459e-8fcc-c5c9c331914b
-   And has a characteristic of: beb5483e-36e1-4688-b7f5-ea07361b26a8
-
-   The design of creating the BLE server is:
-   1. Create a BLE Server
-   2. Create a BLE Service
-   3. Create a BLE Characteristic on the Service
-   4. Create a BLE Descriptor on the characteristic
-   5. Start the service.
-   6. Start advertising.
-
-   A connect hander associated with the server starts a background task that performs notification
-   every couple of seconds.
-*/
 #include "POCSAG_GenerateLBJ.h"
 #include <BLEDevice.h>
 #include <BLEServer.h>
@@ -36,8 +16,8 @@ bool oldDeviceConnected = false;
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/
 
-#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define SERVICE_UUID        "9956b8c2-7433-11eb-9439-0242ac130002"
+#define CHARACTERISTIC_UUID "ac2a442b-3511-40b3-ac2d-521f558b3c17"
 
 
 class MyServerCallbacks: public BLEServerCallbacks {
@@ -110,9 +90,21 @@ void DecodeTask( void * parameter ){
       
 						if(PocsagMsg.Address == LBJ_MESSAGE_ADDR)
 						{
+							char temp[20];
+							int j = 0;
+							for(int i = 0;i<strlen(PocsagMsg.txtMsg);i++){
+								if(i == 0 && PocsagMsg.txtMsg[0] == ' ')
+									continue; 
+								if(i>=1&&PocsagMsg.txtMsg[i] == ' ' && PocsagMsg.txtMsg[i-1] != ' '){
+									temp[j++] = ',';
+								}else{
+									temp[j++] = PocsagMsg.txtMsg[i];
+								}
+								
+							}
 							// notify changed value
     						if (deviceConnected) {
-								pCharacteristic->setValue(PocsagMsg.txtMsg);
+								pCharacteristic->setValue(temp);
         						pCharacteristic->notify();
         						delay(3); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
 								Serial.println("notify send");
@@ -140,7 +132,7 @@ void DecodeTask( void * parameter ){
 
 void BleTask( void * parameter ){
 	// Create the BLE Device
-  	BLEDevice::init("ESP32");
+  	BLEDevice::init("LBJ_Receiver");
 
   	// Create the BLE Server
   	pServer = BLEDevice::createServer();
